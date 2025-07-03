@@ -45,7 +45,59 @@ export default function ChatWithImage() {
     setResult(null);
   };
 
+  const requestCameraPermission = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Quyền truy cập camera",
+        "Ứng dụng cần quyền truy cập camera để chụp ảnh.",
+        [{ text: "OK" }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const requestMediaLibraryPermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Quyền truy cập thư viện",
+        "Ứng dụng cần quyền truy cập thư viện ảnh để chọn ảnh.",
+        [{ text: "OK" }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const takePhoto = async (setImage) => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+      base64: false,
+    });
+
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      const filename = `photo_${Date.now()}.jpg`;
+      const type = "image/jpeg";
+
+      setImage({ uri, name: filename, type });
+      setResult(null);
+    }
+  };
+
   const pickImage = async (setImage) => {
+    const hasPermission = await requestMediaLibraryPermission();
+    if (!hasPermission) return;
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -62,8 +114,29 @@ export default function ChatWithImage() {
       const type = match ? `image/${match[1]}` : `image`;
 
       setImage({ uri, name: filename, type });
-      setResult(null); // Reset result when a new image is picked
+      setResult(null);
     }
+  };
+
+  const showImageOptions = (setImage, imageNumber) => {
+    Alert.alert(
+      `Chọn ảnh ${imageNumber}`,
+      "Bạn muốn chụp ảnh mới hay chọn từ thư viện?",
+      [
+        {
+          text: "📷 Chụp ảnh",
+          onPress: () => takePhoto(setImage),
+        },
+        {
+          text: "🖼️ Chọn từ thư viện",
+          onPress: () => pickImage(setImage),
+        },
+        {
+          text: "Hủy",
+          style: "cancel",
+        },
+      ]
+    );
   };
 
   const handleSubmit = async () => {
@@ -87,7 +160,7 @@ export default function ChatWithImage() {
     });
 
     try {
-      const response = await fetch("http://192.168.1.9:5000/compare", {
+      const response = await fetch("https://fs-api.microbox.tech/compare", {
         method: "POST",
         body: formData,
         headers: {
@@ -186,7 +259,7 @@ export default function ChatWithImage() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <MessageBubble text="Xin chào! Tôi có thể giúp bạn so sánh 2 khuôn mặt. Vui lòng gửi ảnh thứ nhất." />
+        <MessageBubble text="Xin chào! Tôi có thể giúp bạn so sánh 2 khuôn mặt. Vui lòng chọn hoặc chụp ảnh thứ nhất." />
 
         {imageOne ? (
           <MessageBubble isUser>
@@ -196,16 +269,22 @@ export default function ChatWithImage() {
                 <Text style={styles.imageLabel}>Ảnh 1</Text>
               </View>
             </View>
+            <TouchableOpacity
+              style={styles.changeImageButton}
+              onPress={() => showImageOptions(setImageOne, "1")}
+            >
+              <Text style={styles.changeImageText}>🔄 Đổi ảnh</Text>
+            </TouchableOpacity>
           </MessageBubble>
         ) : (
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => pickImage(setImageOne)}
+            onPress={() => showImageOptions(setImageOne, "1")}
           >
             <View style={styles.buttonGradient}>
               <View style={styles.buttonContent}>
                 <Text style={styles.buttonIcon}>📷</Text>
-                <Text style={styles.actionButtonText}>Chọn ảnh 1</Text>
+                <Text style={styles.actionButtonText}>Chọn/Chụp ảnh 1</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -213,7 +292,7 @@ export default function ChatWithImage() {
 
         {imageOne && (
           <>
-            <MessageBubble text="Tuyệt vời! Bây giờ, hãy gửi ảnh thứ hai." />
+            <MessageBubble text="Tuyệt vời! Bây giờ, hãy chọn hoặc chụp ảnh thứ hai." />
             {imageTwo ? (
               <MessageBubble isUser>
                 <View style={styles.imageContainer}>
@@ -222,16 +301,22 @@ export default function ChatWithImage() {
                     <Text style={styles.imageLabel}>Ảnh 2</Text>
                   </View>
                 </View>
+                <TouchableOpacity
+                  style={styles.changeImageButton}
+                  onPress={() => showImageOptions(setImageTwo, "2")}
+                >
+                  <Text style={styles.changeImageText}>🔄 Đổi ảnh</Text>
+                </TouchableOpacity>
               </MessageBubble>
             ) : (
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={() => pickImage(setImageTwo)}
+                onPress={() => showImageOptions(setImageTwo, "2")}
               >
                 <View style={styles.buttonGradient}>
                   <View style={styles.buttonContent}>
                     <Text style={styles.buttonIcon}>📷</Text>
-                    <Text style={styles.actionButtonText}>Chọn ảnh 2</Text>
+                    <Text style={styles.actionButtonText}>Chọn/Chụp ảnh 2</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -400,6 +485,19 @@ const styles = StyleSheet.create({
     color: "#FDFDFD",
     fontSize: 12,
     fontWeight: "600",
+  },
+  changeImageButton: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(253, 253, 253, 0.2)",
+    borderRadius: 12,
+    alignSelf: "center",
+  },
+  changeImageText: {
+    color: "#FDFDFD",
+    fontSize: 12,
+    fontWeight: "500",
   },
   actionButton: {
     borderRadius: 28,
