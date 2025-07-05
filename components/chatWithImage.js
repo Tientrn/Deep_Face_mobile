@@ -49,8 +49,8 @@ export default function ChatWithImage() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
-        "Quyền truy cập camera",
-        "Ứng dụng cần quyền truy cập camera để chụp ảnh.",
+        "Camera Permission",
+        "The app needs camera access to take photos.",
         [{ text: "OK" }]
       );
       return false;
@@ -62,8 +62,8 @@ export default function ChatWithImage() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
-        "Quyền truy cập thư viện",
-        "Ứng dụng cần quyền truy cập thư viện ảnh để chọn ảnh.",
+        "Library Permission",
+        "The app needs access to your photo library to select images.",
         [{ text: "OK" }]
       );
       return false;
@@ -79,7 +79,7 @@ export default function ChatWithImage() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.5,
       base64: false,
     });
 
@@ -102,7 +102,7 @@ export default function ChatWithImage() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.5,
       base64: false,
     });
 
@@ -120,19 +120,19 @@ export default function ChatWithImage() {
 
   const showImageOptions = (setImage, imageNumber) => {
     Alert.alert(
-      `Chọn ảnh ${imageNumber}`,
-      "Bạn muốn chụp ảnh mới hay chọn từ thư viện?",
+      `Select Image ${imageNumber}`,
+      "Would you like to take a new photo or choose from the gallery?",
       [
         {
-          text: "📷 Chụp ảnh",
+          text: "📷 Take Photo",
           onPress: () => takePhoto(setImage),
         },
         {
-          text: "🖼️ Chọn từ thư viện",
+          text: "🖼️ Choose from Gallery",
           onPress: () => pickImage(setImage),
         },
         {
-          text: "Hủy",
+          text: "Cancel",
           style: "cancel",
         },
       ]
@@ -141,7 +141,7 @@ export default function ChatWithImage() {
 
   const handleSubmit = async () => {
     if (!imageOne || !imageTwo) {
-      Alert.alert("Lỗi", "Vui lòng chọn đủ 2 ảnh.");
+      Alert.alert("Error", "Please select both images.");
       return;
     }
 
@@ -169,13 +169,50 @@ export default function ChatWithImage() {
       });
 
       const text = await response.text();
-      const data = JSON.parse(text);
 
-      if (!response.ok) throw new Error(data.error || "Lỗi từ server");
+      // Check if response is empty
+      if (!text || text.trim() === "") {
+        throw new Error("Empty response from server");
+      }
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error("JSON Parse Error:", parseError);
+        console.error("Response text:", text);
+
+        // Check for specific error types
+        if (text.includes("413 Request Entity Too Large")) {
+          throw new Error(
+            "Image files are too large. Please try with smaller images."
+          );
+        } else if (text.includes("413")) {
+          throw new Error("Request too large. Please try with smaller images.");
+        } else if (
+          text.includes("500") ||
+          text.includes("502") ||
+          text.includes("503")
+        ) {
+          throw new Error(
+            "Server is temporarily unavailable. Please try again later."
+          );
+        } else {
+          throw new Error("Invalid response format from server");
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || `Server error: ${response.status}`);
+      }
 
       setResult(data);
     } catch (err) {
-      Alert.alert("Lỗi", err.message || "Đã xảy ra lỗi.");
+      console.error("API Error:", err);
+      Alert.alert(
+        "Error",
+        err.message || "An error occurred while processing the request."
+      );
     } finally {
       setIsLoading(false);
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -185,7 +222,7 @@ export default function ChatWithImage() {
   const renderResult = () => (
     <View style={styles.resultInnerContainer}>
       <View style={styles.resultHeader}>
-        <Text style={styles.resultTitle}>Kết quả so sánh</Text>
+        <Text style={styles.resultTitle}>Comparison Result</Text>
         <View style={styles.resultIconContainer}>
           {result.verified ? (
             <View style={styles.successIcon}>
@@ -201,37 +238,39 @@ export default function ChatWithImage() {
 
       <View style={styles.resultContent}>
         <View style={styles.resultRow}>
-          <Text style={styles.resultLabel}>Độ tương đồng:</Text>
+          <Text style={styles.resultLabel}>Similarity:</Text>
           <Text style={styles.resultValue}>
             {result.similarity_percentage?.toFixed(1)}%
           </Text>
         </View>
 
         <View style={styles.resultRow}>
-          <Text style={styles.resultLabel}>Trạng thái:</Text>
-          <Text
-            style={[
-              styles.resultValue,
-              { color: result.verified ? "#10B981" : "#EF4444" },
-            ]}
-          >
-            {result.verified ? "Xác thực thành công" : "Xác thực thất bại"}
-          </Text>
-        </View>
-
-        <View style={styles.resultRow}>
-          <Text style={styles.resultLabel}>Khoảng cách:</Text>
+          <Text style={styles.resultLabel}>Distance:</Text>
           <Text style={styles.resultValue}>{result.distance}</Text>
         </View>
 
         <View style={styles.resultRow}>
-          <Text style={styles.resultLabel}>Ngưỡng:</Text>
+          <Text style={styles.resultLabel}>Threshold:</Text>
           <Text style={styles.resultValue}>{result.threshold}</Text>
         </View>
 
         <View style={styles.resultRow}>
           <Text style={styles.resultLabel}>Model:</Text>
           <Text style={styles.resultValue}>{result.model}</Text>
+        </View>
+
+        <View style={styles.statusCard}>
+          <Text style={styles.statusLabel}>Verification Status</Text>
+          <View
+            style={[
+              styles.statusBadge,
+              result.verified ? styles.successBadge : styles.errorBadge,
+            ]}
+          >
+            <Text style={styles.statusText}>
+              {result.verified ? "✓ Verified" : "✗ Not Verified"}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -241,11 +280,14 @@ export default function ChatWithImage() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerGradient}>
-          <Text style={styles.headerTitle}>🏝️ Face Recognition</Text>
-          <Text style={styles.headerSubtitle}>So sánh khuôn mặt</Text>
-          <View style={styles.waveDecoration}>
-            <View style={styles.wave} />
-            <View style={[styles.wave, styles.wave2]} />
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>🤖 Face Recognition</Text>
+            <Text style={styles.headerSubtitle}>Advanced AI Technology</Text>
+          </View>
+          <View style={styles.headerDecoration}>
+            <View style={styles.decorationCircle} />
+            <View style={[styles.decorationCircle, styles.decorationCircle2]} />
+            <View style={[styles.decorationCircle, styles.decorationCircle3]} />
           </View>
         </View>
       </View>
@@ -259,21 +301,21 @@ export default function ChatWithImage() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <MessageBubble text="Xin chào! Tôi có thể giúp bạn so sánh 2 khuôn mặt. Vui lòng chọn hoặc chụp ảnh thứ nhất." />
+        <MessageBubble text="🚀 Welcome! I'll help you compare two faces using advanced AI technology. Let's start with the first image." />
 
         {imageOne ? (
           <MessageBubble isUser>
             <View style={styles.imageContainer}>
               <Image source={{ uri: imageOne.uri }} style={styles.image} />
               <View style={styles.imageOverlay}>
-                <Text style={styles.imageLabel}>Ảnh 1</Text>
+                <Text style={styles.imageLabel}>📸 Image 1</Text>
               </View>
             </View>
             <TouchableOpacity
               style={styles.changeImageButton}
               onPress={() => showImageOptions(setImageOne, "1")}
             >
-              <Text style={styles.changeImageText}>🔄 Đổi ảnh</Text>
+              <Text style={styles.changeImageText}>🔄 Change Image</Text>
             </TouchableOpacity>
           </MessageBubble>
         ) : (
@@ -283,8 +325,8 @@ export default function ChatWithImage() {
           >
             <View style={styles.buttonGradient}>
               <View style={styles.buttonContent}>
-                <Text style={styles.buttonIcon}>📷</Text>
-                <Text style={styles.actionButtonText}>Chọn/Chụp ảnh 1</Text>
+                <Text style={styles.buttonIcon}>📸</Text>
+                <Text style={styles.actionButtonText}>Select First Image</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -292,20 +334,20 @@ export default function ChatWithImage() {
 
         {imageOne && (
           <>
-            <MessageBubble text="Tuyệt vời! Bây giờ, hãy chọn hoặc chụp ảnh thứ hai." />
+            <MessageBubble text="🎉 Great! Now select the second image to proceed with the comparison." />
             {imageTwo ? (
               <MessageBubble isUser>
                 <View style={styles.imageContainer}>
                   <Image source={{ uri: imageTwo.uri }} style={styles.image} />
                   <View style={styles.imageOverlay}>
-                    <Text style={styles.imageLabel}>Ảnh 2</Text>
+                    <Text style={styles.imageLabel}>📸 Image 2</Text>
                   </View>
                 </View>
                 <TouchableOpacity
                   style={styles.changeImageButton}
                   onPress={() => showImageOptions(setImageTwo, "2")}
                 >
-                  <Text style={styles.changeImageText}>🔄 Đổi ảnh</Text>
+                  <Text style={styles.changeImageText}>🔄 Change Image</Text>
                 </TouchableOpacity>
               </MessageBubble>
             ) : (
@@ -315,8 +357,10 @@ export default function ChatWithImage() {
               >
                 <View style={styles.buttonGradient}>
                   <View style={styles.buttonContent}>
-                    <Text style={styles.buttonIcon}>📷</Text>
-                    <Text style={styles.actionButtonText}>Chọn/Chụp ảnh 2</Text>
+                    <Text style={styles.buttonIcon}>📸</Text>
+                    <Text style={styles.actionButtonText}>
+                      Select Second Image
+                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -327,8 +371,8 @@ export default function ChatWithImage() {
         {isLoading && (
           <MessageBubble>
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#009CA6" />
-              <Text style={styles.loadingText}>Đang phân tích...</Text>
+              <ActivityIndicator size="large" color="#6366f1" />
+              <Text style={styles.loadingText}>🔍 Analyzing with AI...</Text>
             </View>
           </MessageBubble>
         )}
@@ -340,7 +384,7 @@ export default function ChatWithImage() {
         {result ? (
           <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
             <View style={styles.resetButtonGradient}>
-              <Text style={styles.resetButtonText}>So sánh khác</Text>
+              <Text style={styles.resetButtonText}>🔄 New Comparison</Text>
             </View>
           </TouchableOpacity>
         ) : (
@@ -353,7 +397,7 @@ export default function ChatWithImage() {
             disabled={!imageOne || !imageTwo || isLoading}
           >
             <View style={styles.compareButtonGradient}>
-              <Text style={styles.compareButtonText}>So sánh</Text>
+              <Text style={styles.compareButtonText}>🚀 Start Comparison</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -365,155 +409,158 @@ export default function ChatWithImage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FDFDFD",
+    backgroundColor: "#f5f5f5",
   },
   header: {
-    height: 120,
-    overflow: "hidden",
+    paddingVertical: 24,
+    paddingHorizontal: 20,
   },
   headerGradient: {
-    flex: 1,
-    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  headerContent: {
+    padding: 20,
     alignItems: "center",
-    position: "relative",
-    backgroundColor: "#009CA6",
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#FDFDFD",
-    textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.1)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#1f2937",
+    marginBottom: 8,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: "#FDFDFD",
-    textAlign: "center",
-    marginTop: 4,
-    opacity: 0.9,
+    fontSize: 16,
+    color: "#6b7280",
+    fontWeight: "500",
   },
-  waveDecoration: {
+  headerDecoration: {
     position: "absolute",
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    height: 20,
-  },
-  wave: {
-    position: "absolute",
     bottom: 0,
-    left: 0,
-    right: 0,
-    height: 20,
-    backgroundColor: "#FDFDFD",
-    borderRadius: 20,
-    transform: [{ scaleY: 0.5 }],
   },
-  wave2: {
-    backgroundColor: "rgba(253, 253, 253, 0.8)",
-    transform: [{ scaleY: 0.3 }],
-    bottom: 5,
+  decorationCircle: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: "#6366f1",
+    opacity: 0.05,
+    top: -75,
+    right: -75,
+  },
+  decorationCircle2: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#6366f1",
+    opacity: 0.03,
+    top: -50,
+    right: -25,
+  },
+  decorationCircle3: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#6366f1",
+    opacity: 0.04,
+    top: -40,
+    right: 10,
   },
   scrollView: {
     flex: 1,
     paddingHorizontal: 16,
   },
   scrollViewContent: {
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingVertical: 24,
   },
   messageContainer: {
     padding: 16,
-    borderRadius: 24,
+    borderRadius: 12,
     marginBottom: 16,
     maxWidth: "85%",
-    shadowColor: "#009CA6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   botMessageContainer: {
-    backgroundColor: "#FDFDFD",
     alignSelf: "flex-start",
-    borderBottomLeftRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(0, 156, 166, 0.1)",
+    backgroundColor: "#f8fafc",
   },
   userMessageContainer: {
-    backgroundColor: "#009CA6",
     alignSelf: "flex-end",
-    borderBottomRightRadius: 8,
+    backgroundColor: "transparent",
   },
   botMessageText: {
     fontSize: 16,
-    color: "#1E293B",
-    lineHeight: 22,
+    color: "#374151",
+    lineHeight: 24,
+    fontWeight: "500",
   },
   userMessageText: {
     fontSize: 16,
-    color: "#FDFDFD",
-    lineHeight: 22,
+    color: "#ffffff",
+    lineHeight: 24,
+    fontWeight: "500",
   },
   imageContainer: {
-    position: "relative",
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: "hidden",
-    shadowColor: "#009CA6",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
   image: {
-    width: 220,
-    height: 220,
-    borderRadius: 16,
+    width: width * 0.7,
+    height: width * 0.7,
   },
   imageOverlay: {
     position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "rgba(0, 156, 166, 0.8)",
-    paddingHorizontal: 10,
+    top: 12,
+    left: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   imageLabel: {
-    color: "#FDFDFD",
-    fontSize: 12,
+    color: "#ffffff",
+    fontSize: 14,
     fontWeight: "600",
   },
   changeImageButton: {
-    marginTop: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(253, 253, 253, 0.2)",
-    borderRadius: 12,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 8,
     alignSelf: "center",
   },
   changeImageText: {
-    color: "#FDFDFD",
-    fontSize: 12,
-    fontWeight: "500",
+    color: "#374151",
+    fontSize: 14,
+    fontWeight: "600",
   },
   actionButton: {
-    borderRadius: 28,
-    alignSelf: "center",
-    marginVertical: 12,
-    shadowColor: "#009CA6",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    borderRadius: 12,
+    marginVertical: 16,
   },
   buttonGradient: {
     paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 28,
-    backgroundColor: "#009CA6",
+    borderRadius: 12,
+    backgroundColor: "#1e1e1e",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   buttonContent: {
     flexDirection: "row",
@@ -521,125 +568,105 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   buttonIcon: {
-    fontSize: 18,
+    fontSize: 20,
     marginRight: 8,
+    color: "#ffffff",
   },
   actionButtonText: {
-    color: "#FDFDFD",
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
   },
   bottomBar: {
-    padding: 20,
-    backgroundColor: "#FDFDFD",
+    padding: 16,
+    backgroundColor: "#ffffff",
     borderTopWidth: 1,
-    borderTopColor: "rgba(0, 156, 166, 0.1)",
-    shadowColor: "#009CA6",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderTopColor: "#e5e7eb",
   },
   compareButton: {
-    borderRadius: 32,
-    shadowColor: "#009CA6",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    borderRadius: 12,
   },
   compareButtonGradient: {
-    paddingVertical: 18,
-    borderRadius: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "#009CA6",
+    backgroundColor: "#1e1e1e",
   },
   compareButtonText: {
-    color: "#FDFDFD",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  resetButton: {
-    borderRadius: 32,
-    shadowColor: "#F4C95D",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  resetButtonGradient: {
-    paddingVertical: 18,
-    borderRadius: 32,
-    alignItems: "center",
-    backgroundColor: "#F4C95D",
-  },
-  resetButtonText: {
-    color: "#1E293B",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  loadingText: {
-    marginLeft: 12,
+    color: "#ffffff",
     fontSize: 16,
-    color: "#009CA6",
     fontWeight: "600",
   },
+  resetButton: {
+    borderRadius: 12,
+  },
+  resetButtonGradient: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: "#6b7280",
+  },
+  resetButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  loadingContainer: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#374151",
+    fontWeight: "600",
+    marginTop: 8,
+  },
   resultInnerContainer: {
-    padding: 8,
+    padding: 20,
   },
   resultHeader: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 156, 166, 0.2)",
+    borderBottomColor: "#e5e7eb",
   },
   resultTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#009CA6",
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#1f2937",
+    marginBottom: 12,
   },
   resultIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
+    marginTop: 8,
   },
   successIcon: {
-    backgroundColor: "#10B981",
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    backgroundColor: "#10b981",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   successIconText: {
-    color: "#FDFDFD",
-    fontSize: 16,
+    color: "#ffffff",
+    fontSize: 24,
     fontWeight: "bold",
   },
   errorIcon: {
-    backgroundColor: "#EF4444",
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    backgroundColor: "#ef4444",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   errorIconText: {
-    color: "#FDFDFD",
-    fontSize: 16,
+    color: "#ffffff",
+    fontSize: 24,
     fontWeight: "bold",
   },
   resultContent: {
@@ -649,16 +676,80 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   resultLabel: {
-    fontSize: 15,
-    color: "#64748B",
-    fontWeight: "500",
+    fontSize: 16,
+    color: "#6b7280",
+    fontWeight: "600",
+    flex: 1,
   },
   resultValue: {
-    fontSize: 15,
-    color: "#009CA6",
+    fontSize: 16,
+    color: "#1f2937",
+    fontWeight: "700",
+    textAlign: "right",
+    flex: 1,
+  },
+  statusCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  statusCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  statusLabel: {
+    fontSize: 16,
+    color: "#6b7280",
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  statusBadge: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  successBadge: {
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    borderColor: "#10b981",
+    borderWidth: 1,
+  },
+  errorBadge: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderColor: "#ef4444",
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1f2937",
+  },
+  techInfoContainer: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 16,
+  },
+  techInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  techLabel: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  techValue: {
+    fontSize: 14,
+    color: "#1f2937",
     fontWeight: "600",
   },
 });
